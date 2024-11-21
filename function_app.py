@@ -6,25 +6,29 @@ import os
 import azure.functions as func
 
 # Configurações do Blob Storage
-connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+connection_string = "<Inserir a String de conexão com o Azure Storage Account>"
+# Exemplo:
+#connection_string = "DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName=stfiapgs;AccountKey=rQ/Cdadasdfsdqffsdfs8kvxcvxcFkvCTzNeq8lsfsdfhsdfidsfksdIGKQJhrgQR8sX9KG4L2Xjv9m7ldfsdfs+AStTm0ldg==;BlobEndpoint=https://stfiapgs.blob.core.windows.net/;FileEndpoint=https://stfiapgs.file.core.windows.net/;QueueEndpoint=https://stfiapgs.queue.core.windows.net/;TableEndpoint=https://stfiapgs.table.core.windows.net/"
+
 blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-container_name = 'conradcontainer'
-blob_name = 'part-r-00000-f5c243b9-a015-4a3b-a4a8-eca00f80f04c.json'
+container_name = '<nome do contrainer>'
+blob_name = '<nome do arquivo CSV ou JSON>'
 
 # Configurações do Cosmos DB
-CONNECTION_STRING = os.getenv("AZURE_COSMOS_CONNECTION_STRING")
-DB_NAME = "api-mongodb-sample-database"
-UNSHARDED_COLLECTION_NAME = "classification-colors-ml-collection"
+CONNECTION_STRING = "<Inserir a String de conexão com o Azure Cosmo DB>"
+# Exemplo
+#CONNECTION_STRING = "mongodb://cosmodbserver-2tscr:3243l3k2hklwfed8p34y2sdfO4bAA==@cosmodbserver-2tscr.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@cosmodbserver-2tscr@"
 
-# Função para ler o JSON de uma string
-def read_json_string(json_string):
-    """Read JSON string and return its contents as a list of dictionaries"""
-    try:
-        data = [json.loads(line.strip()) for line in json_string.splitlines()]
-        return data
-    except json.JSONDecodeError as e:
-        logging.error(f"Error decoding JSON: {e}")
-        raise e
+DB_NAME = "<nome_do_cosmo_db>"
+UNSHARDED_COLLECTION_NAME = "<nome da collection>"
+
+# Função para ler o CSV e converter em DataFrame
+def read_csv_from_azure(blob_stream):
+
+    # Ler o CSV usando pandas
+    df = pd.read_csv(io.BytesIO(blob_stream))
+    
+    return df
 
 # Função para baixar o blob do Azure Blob Storage e processar os dados na memória
 def download_blob_storage(blob_service_client, container_name, blob_name):
@@ -33,7 +37,13 @@ def download_blob_storage(blob_service_client, container_name, blob_name):
         blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
         blob_data = blob_client.download_blob().readall().decode('utf-8')
         logging.info("Blob baixado com sucesso!")
-        return read_json_string(blob_data)
+        print("Blob baixado com sucesso!")
+
+        # Baixar o blob como um stream
+        blob_stream = blob_client.download_blob().readall()
+        
+        return read_csv_from_azure(blob_stream)
+    
     except Exception as e:
         logging.error(f"Erro ao baixar o blob: {e}")
         return []
@@ -59,20 +69,19 @@ def create_database_unsharded_collection(client):
     return db[UNSHARDED_COLLECTION_NAME]
 
 # Função para salvar documentos na coleção
-def save_documents(collection, documents):
+def save_documents(collection, records):
     """Save a list of documents to the collection"""
-    for document in documents:
-        # Verifique se o documento já existe na coleção
-        if collection.find_one({"lab": document["lab"], "color": document["color"], "value1": document["value1"], "value2": document["value2"]}):
-            logging.info(f"Documento já existe: {document}")
-        else:
-            collection.insert_one(document)
-            logging.info(f"Documento inserido: {document}")
-    logging.info(f"Processamento de {len(documents)} documentos concluído.")
+    
+    # Gravar cada registro no Cosmos DB
+    for record in records:
+        collection.insert_one(record)
+
+    logging.info(f"Dados gravados com sucesso no container '{container_name}' do Cosmos DB.")
+    print(f"Dados gravados com sucesso no container '{container_name}' do Cosmos DB.")
 
 # Função principal
-def main(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+def main():
+    logging.info('Execução da função MAIN')
 
     try:
         blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -94,14 +103,21 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Conexão ao Cosmos DB estabelecida com sucesso.")
 
         # Download do blob e leitura dos documentos
-        documents = download_blob_storage(blob_service_client, container_name, blob_name)
-        logging.info(f"Documentos lidos: {documents}")
+        df = download_blob_storage(blob_service_client, container_name, blob_name)
 
+        ##
+        ## Trabalhar o algoritmo de Data Science nesse trecho
+        ##
+
+        # Converter o DataFrame para uma lista de dicionários
+        records = json.loads(df.to_json(orient='records'))
+        
         # Criar a coleção no Cosmos DB
         collection = create_database_unsharded_collection(client)
 
         # Salvar os documentos na coleção
-        save_documents(collection, documents)
+        save_documents(collection, records)
+
     except pymongo.errors.OperationFailure as e:
         logging.error(f"Falha na operação do MongoDB: {e}")
         return func.HttpResponse(f"Erro ao conectar ao Cosmos DB: {e}", status_code=500)
@@ -114,10 +130,5 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     return func.HttpResponse("Dados inseridos com sucesso no Cosmos DB", status_code=200)
 
-# Registro do Trigger HTTP
-app = func.FunctionApp()
-
-@app.function_name(name="MyFunction")
-@app.route(route="MyFunction", methods=["GET", "POST"], auth_level=func.AuthLevel.ANONYMOUS)
-def MyFunction(req: func.HttpRequest) -> func.HttpResponse:
-    return main(req)
+if __name__ == "__main__":
+    main()
