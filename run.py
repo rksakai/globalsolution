@@ -10,7 +10,7 @@ import json
 # Sample - demonstrates the basic CRUD operations on a document in the Azure Cosmos DB API for MongoDB
 # ----------------------------------------------------------------------------------------------------------
 
-CONNECTION_STRING = "mongodb://conradcosmosdb:mlBJL8oS4rn7OkSbEGKm0tYybL2HLJxY3MeyX0UWrNmMs6eCfcbXTCwX0ZDscOmSsLQxia1Ex3jbACDba9vO7g==@conradcosmosdb.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@conradcosmosdb@"
+CONNECTION_STRING = ""
 DB_NAME = "api-mongodb-sample-database"
 UNSHARDED_COLLECTION_NAME = "unsharded-sample-collection"
 SAMPLE_FIELD_NAME = "sample_field"
