@@ -1,3 +1,9 @@
+# Configuração do provedor Azure
+provider "azurerm" {
+  features {}
+  subscription_id = "24234239c-fsdfd-44234-asdfs-f4234267"
+}
+
 resource "azurerm_resource_group" "example" {
   name     = "rg-teste"
   location = "East US"
